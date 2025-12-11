@@ -41,12 +41,12 @@ fetch_category() {
     local ok=0
     for base in "${BASE_URLS[@]}"; do
         local url="${base}/${name}"
-        echo "Fetching ${url}"
+        echo "Fetching ${url}" >&2
         if curl -L --fail --retry 3 --retry-delay 2 --retry-all-errors --silent --show-error -o "${outfile}" "${url}"; then
             ok=1
             break
         else
-            echo "Failed: ${url}"
+            echo "Failed: ${url}" >&2
         fi
     done
     if [ "${ok}" -ne 1 ]; then
