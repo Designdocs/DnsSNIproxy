@@ -77,4 +77,5 @@ wget --no-check-certificate -O dns.sh https://raw.githubusercontent.com/Designdo
   ```
 
 ## 感谢
-**在 dnsmasq_sniproxy_install 项目基础上二次开发**：https://github.com/myxuchangbin/dnsmasq_sniproxy_install
+- **在 dnsmasq_sniproxy_install 项目基础上二次开发**：https://github.com/myxuchangbin/dnsmasq_sniproxy_install
+- https://github.com/v2fly/domain-list-community/
