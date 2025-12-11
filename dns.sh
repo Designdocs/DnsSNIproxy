@@ -127,6 +127,7 @@ sync_dnsmasq_rules(){
         printf "address=/%s/%s\n" "${domain}" "${target_ip}" \
         | tee -a /etc/dnsmasq.d/custom_netflix.conf > /dev/null 2>&1
     done
+    echo "port=53" > /etc/dnsmasq.d/99-port.conf
     rm -f /tmp/proxy-domains.txt
 }
 
@@ -597,6 +598,7 @@ undnsmasq(){
         fi
     fi
     rm -rf /etc/dnsmasq.d/custom_netflix.conf
+    rm -rf /etc/dnsmasq.d/99-port.conf
     echo -e "[${green}Info${plain}] services uninstall dnsmasq complete..."
 }
 

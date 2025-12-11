@@ -85,7 +85,8 @@ bash update_geodata.sh
   systemctl restart systemd-resolved.service
   ```
 
-- 如果要切换端口
+### 如果要切换端口
+
   配置文件：`/etc/dnsmasq.d/` 中新增 
 
   ```
