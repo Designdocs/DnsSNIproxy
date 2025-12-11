@@ -1,16 +1,24 @@
 ## 自用实验!请勿使用！
 
 ### 常用命令
-```
+
 # 快速安装
+```
 wget --no-check-certificate -O dns.sh https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/dns.sh && bash dns.sh -f
+```
 
 # 普通安装
+```
 wget --no-check-certificate -O dns.sh https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/dns.sh && bash dns.sh -i
+```
 
 # 卸载
+```
 wget --no-check-certificate -O dns.sh https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/dns.sh && bash dns.sh -u
+```
 
+### 其他命令
+```
 # 手动同步配置/域名/geo 数据
 bash dns.sh -r
 
