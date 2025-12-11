@@ -1,13 +1,28 @@
 ## 自用实验!请勿使用！
 
 ### 常用命令
-- 快速安装：`wget --no-check-certificate -O dns.sh https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/dns.sh && bash dns.sh -f`
-- 普通安装：`wget --no-check-certificate -O dns.sh https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/dns.sh && bash dns.sh -i`
-- 卸载：`wget --no-check-certificate -O dns.sh https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/dns.sh && bash dns.sh -u`
-- 手动同步配置/域名/geo 数据：`bash dns.sh -r`
-- 开启每日 04:00 自动同步：`bash dns.sh -a`
-- 拉取并去重 AI/流媒体域名：`bash update_proxy_domains.sh`
-- 拉取最新 geo 数据：`bash update_geodata.sh`
+```
+# 快速安装
+wget --no-check-certificate -O dns.sh https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/dns.sh && bash dns.sh -f
+
+# 普通安装
+wget --no-check-certificate -O dns.sh https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/dns.sh && bash dns.sh -i
+
+# 卸载
+wget --no-check-certificate -O dns.sh https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/dns.sh && bash dns.sh -u
+
+# 手动同步配置/域名/geo 数据
+bash dns.sh -r
+
+# 开启每日 04:00 自动同步
+bash dns.sh -a
+
+# 拉取并去重 AI/流媒体域名
+bash update_proxy_domains.sh
+
+# 拉取最新 geo 数据
+bash update_geodata.sh
+```
 
 > 域名列表与配置均来自本仓库（`proxy-domains.txt`、`dnsmasq.conf`、`sniproxy.conf`、`geoip.dat`、`geosite.dat`）。执行 `-r` 或等待定时任务即可下发到各 VPS，无需手动编辑 `/etc/dnsmasq.d/custom_netflix.conf` 或 `/etc/sniproxy.conf`。
 
