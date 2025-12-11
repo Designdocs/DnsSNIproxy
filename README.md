@@ -32,12 +32,17 @@ bash update_proxy_domains.sh
 bash update_geodata.sh
 ```
 
+
 > 域名列表与配置均来自本仓库（`proxy-domains.txt`、`dnsmasq.conf`、`sniproxy.conf`、`geoip.dat`、`geosite.dat`）。执行 `-r` 或等待定时任务即可下发到各 VPS，无需手动编辑 `/etc/dnsmasq.d/custom_netflix.conf` 或 `/etc/sniproxy.conf`。
 
+
+
 ### 定时任务示例（本地）
-- geodata 每日 04:30：`(crontab -l 2>/dev/null; echo "30 4 * * * cd $(pwd) && bash update_geodata.sh >/tmp/update_geodata.log 2>&1") | crontab -`
-- 域名列表每日 04:35：`(crontab -l 2>/dev/null; echo "35 4 * * * cd $(pwd) && bash update_proxy_domains.sh >/tmp/update_proxy_domains.log 2>&1") | crontab -`
-- 更新后记得提交：`git add geoip.dat geosite.dat proxy-domains.txt && git commit && git push`
+- geodata 每日 04:30：
+   `(crontab -l 2>/dev/null; echo "30 4 * * * cd $(pwd) && bash update_geodata.sh >/tmp/update_geodata.log 2>&1") | crontab -`
+- 域名列表每日 04:35：
+   `(crontab -l 2>/dev/null; echo "35 4 * * * cd $(pwd) && bash update_proxy_domains.sh >/tmp/update_proxy_domains.log 2>&1") | crontab -`
+
 
 ### 使用方法：
 将代理主机的 DNS 地址设置为安装了 dnsmasq 的主机 IP 即可，如果遇到问题，尝试在配置文件中只保留一个 DNS 地址。
