@@ -23,6 +23,14 @@ wget --no-check-certificate -O dns.sh https://raw.githubusercontent.com/Designdo
 
 ### 在本地（macOS）定期更新 geodata
 - 手动拉取最新 geodata：`bash update_geodata.sh`
+- 写入每日 04:30 自动更新：`(crontab -l 2>/dev/null; echo "30 4 * * * cd $(pwd) && bash update_geodata.sh >/tmp/update_geodata.log 2>&1") | crontab -`
+- 更新后记得 `git add geoip.dat geosite.dat && git commit && git push`，服务器端再执行 `bash dns.sh -r` 或等待自动同步。
+
+### 定期拉取 AI/流媒体域名列表并推送
+- 拉取并去重写入 `proxy-domains.txt`：`bash update_proxy_domains.sh`
+- 默认分类：anthropic, cerebras, comfy, cursor, elevenlabs, google-deepmind, groq, huggingface, openai, perplexity, poe, xai, netflix, hulu, google-scholar, google, spotify, disney
+- 每日 04:35 自动更新示例：`(crontab -l 2>/dev/null; echo "35 4 * * * cd $(pwd) && bash update_proxy_domains.sh >/tmp/update_proxy_domains.log 2>&1") | crontab -`
+- 更新后 `git add proxy-domains.txt && git commit && git push`，服务器端 `bash dns.sh -r` 或等待自动同步即可下发。
 
 ### 使用方法：
 将代理主机的 DNS 地址设置为安装了 dnsmasq 的主机 IP 即可，如果遇到问题，尝试在配置文件中只保留一个 DNS 地址。
