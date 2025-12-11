@@ -6,6 +6,8 @@ red='\033[0;31m'
 green='\033[0;32m'
 yellow='\033[0;33m'
 plain='\033[0m'
+repo_base_url="https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main"
+geodata_dir="/etc/dnsmasq.d/geodata"
 
 [[ $EUID -ne 0 ]] && echo -e "[${red}Error${plain}] 请使用root用户来执行脚本!" && exit 1
 
@@ -115,6 +117,31 @@ download(){
         echo -e "[${red}Error${plain}] Download ${filename} failed."
         exit 1
     fi
+}
+
+sync_dnsmasq_rules(){
+    local target_ip=${1}
+    download /etc/dnsmasq.d/custom_netflix.conf "${repo_base_url}/dnsmasq.conf"
+    download /tmp/proxy-domains.txt "${repo_base_url}/proxy-domains.txt"
+    for domain in $(cat /tmp/proxy-domains.txt); do
+        printf "address=/%s/%s\n" "${domain}" "${target_ip}" \
+        | tee -a /etc/dnsmasq.d/custom_netflix.conf > /dev/null 2>&1
+    done
+    rm -f /tmp/proxy-domains.txt
+}
+
+sync_sniproxy_rules(){
+    download /etc/sniproxy.conf "${repo_base_url}/sniproxy.conf"
+    download /tmp/sniproxy-domains.txt "${repo_base_url}/proxy-domains.txt"
+    sed -i -e 's/\./\\\./g' -e 's/^/    \.\*/' -e 's/$/\$ \*/' /tmp/sniproxy-domains.txt || (echo -e "[${red}Error:${plain}] Failed to configuration sniproxy." && exit 1)
+    sed -i '/table {/r /tmp/sniproxy-domains.txt' /etc/sniproxy.conf || (echo -e "[${red}Error:${plain}] Failed to configuration sniproxy." && exit 1)
+    rm -f /tmp/sniproxy-domains.txt
+}
+
+sync_geodata(){
+    mkdir -p "${geodata_dir}"
+    download "${geodata_dir}/geosite.dat" "${repo_base_url}/geosite.dat"
+    download "${geodata_dir}/geoip.dat" "${repo_base_url}/geoip.dat"
 }
 
 error_detect_depends(){
@@ -278,12 +305,7 @@ install_dnsmasq(){
         yes|cp -f /tmp/dnsmasq-2.91/src/dnsmasq /usr/sbin/dnsmasq && chmod +x /usr/sbin/dnsmasq
     fi
     [ ! -f /usr/sbin/dnsmasq ] && echo -e "[${red}Error${plain}] 安装dnsmasq出现问题，请检查." && exit 1
-    download /etc/dnsmasq.d/custom_netflix.conf https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/dnsmasq.conf
-    download /tmp/proxy-domains.txt https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/proxy-domains.txt
-    for domain in $(cat /tmp/proxy-domains.txt); do
-        printf "address=/${domain}/${publicip}\n"\
-        | tee -a /etc/dnsmasq.d/custom_netflix.conf > /dev/null 2>&1
-    done
+    sync_dnsmasq_rules "${publicip}"
     [ "$(grep -x -E "(conf-dir=/etc/dnsmasq.d|conf-dir=/etc/dnsmasq.d,.bak|conf-dir=/etc/dnsmasq.d/,\*.conf|conf-dir=/etc/dnsmasq.d,.rpmnew,.rpmsave,.rpmorig)" /etc/dnsmasq.conf)" ] || echo -e "\nconf-dir=/etc/dnsmasq.d" >> /etc/dnsmasq.conf
     echo "启动 Dnsmasq 服务..."
     if check_sys packageManager yum; then
@@ -304,7 +326,7 @@ install_dnsmasq(){
         systemctl restart dnsmasq
     fi
     cd /tmp
-    rm -rf /tmp/dnsmasq-2.91 /tmp/dnsmasq-2.91.tar.gz /tmp/proxy-domains.txt
+    rm -rf /tmp/dnsmasq-2.91 /tmp/dnsmasq-2.91.tar.gz
     echo -e "[${green}Info${plain}] dnsmasq install complete..."
 }
 
@@ -331,14 +353,14 @@ install_sniproxy(){
         if [ -e sniproxy-0.6.1 ]; then
             rm -rf sniproxy-0.6.1
         fi
-        download /tmp/sniproxy-0.6.1.tar.gz https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/sniproxy/sniproxy-0.6.1.tar.gz
+        download /tmp/sniproxy-0.6.1.tar.gz ${repo_base_url}/sniproxy/sniproxy-0.6.1.tar.gz
         tar -zxf sniproxy-0.6.1.tar.gz
         cd sniproxy-0.6.1
     fi
     if check_sys packageManager yum; then
         if [[ ${fastmode} = "1" ]]; then
             if [[ ${bit} = "x86_64" ]]; then
-                download /tmp/sniproxy-0.6.1-1.el8.x86_64.rpm https://github.com/Designdocs/DnsSNIproxy/raw/main/sniproxy/sniproxy-0.6.1-1.el8.x86_64.rpm
+                download /tmp/sniproxy-0.6.1-1.el8.x86_64.rpm ${repo_base_url}/sniproxy/sniproxy-0.6.1-1.el8.x86_64.rpm
                 error_detect_depends "yum -y install /tmp/sniproxy-0.6.1-1.el8.x86_64.rpm"
                 rm -f /tmp/sniproxy-0.6.1-1.el8.x86_64.rpm
             else
@@ -354,17 +376,17 @@ install_sniproxy(){
             fi
         fi
         if centosversion 6; then
-            download /etc/init.d/sniproxy https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/sniproxy.init && chmod +x /etc/init.d/sniproxy
+            download /etc/init.d/sniproxy ${repo_base_url}/sniproxy.init && chmod +x /etc/init.d/sniproxy
             [ ! -f /etc/init.d/sniproxy ] && echo -e "[${red}Error${plain}] 下载Sniproxy启动文件出现问题，请检查." && exit 1
         else
-            download /etc/systemd/system/sniproxy.service https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/sniproxy.service
+            download /etc/systemd/system/sniproxy.service ${repo_base_url}/sniproxy.service
             systemctl daemon-reload
             [ ! -f /etc/systemd/system/sniproxy.service ] && echo -e "[${red}Error${plain}] 下载Sniproxy启动文件出现问题，请检查." && exit 1
         fi
     elif check_sys packageManager apt; then
         if [[ ${fastmode} = "1" ]]; then
             if [[ ${bit} = "x86_64" ]]; then
-                download /tmp/sniproxy_0.6.1_amd64.deb https://github.com/Designdocs/DnsSNIproxy/raw/main/sniproxy/sniproxy_0.6.1_amd64.deb
+                download /tmp/sniproxy_0.6.1_amd64.deb ${repo_base_url}/sniproxy/sniproxy_0.6.1_amd64.deb
                 error_detect_depends "dpkg -i --no-debsig /tmp/sniproxy_0.6.1_amd64.deb"
                 rm -f /tmp/sniproxy_0.6.1_amd64.deb
             else
@@ -373,15 +395,12 @@ install_sniproxy(){
         else
             env NAME="sniproxy" DEBFULLNAME="sniproxy" DEBEMAIL="sniproxy@example.com" EMAIL="sniproxy@example.com" ./autogen.sh && ./configure --prefix=/usr && make && make install
         fi  
-        download /etc/systemd/system/sniproxy.service https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/sniproxy.service
+        download /etc/systemd/system/sniproxy.service ${repo_base_url}/sniproxy.service
         systemctl daemon-reload
         [ ! -f /etc/systemd/system/sniproxy.service ] && echo -e "[${red}Error${plain}] 下载Sniproxy启动文件出现问题，请检查." && exit 1
     fi
     [ ! -f /usr/sbin/sniproxy ] && echo -e "[${red}Error${plain}] 安装Sniproxy出现问题，请检查." && exit 1
-    download /etc/sniproxy.conf https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/sniproxy.conf
-    download /tmp/sniproxy-domains.txt https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/proxy-domains.txt
-    sed -i -e 's/\./\\\./g' -e 's/^/    \.\*/' -e 's/$/\$ \*/' /tmp/sniproxy-domains.txt || (echo -e "[${red}Error:${plain}] Failed to configuration sniproxy." && exit 1)
-    sed -i '/table {/r /tmp/sniproxy-domains.txt' /etc/sniproxy.conf || (echo -e "[${red}Error:${plain}] Failed to configuration sniproxy." && exit 1)
+    sync_sniproxy_rules
     if [ ! -e /var/log/sniproxy ]; then
         mkdir /var/log/sniproxy
     fi
@@ -400,7 +419,6 @@ install_sniproxy(){
     fi
     cd /tmp
     rm -rf /tmp/sniproxy-0.6.1/
-    rm -rf /tmp/sniproxy-domains.txt
     echo -e "[${green}Info${plain}] sniproxy install complete..."
 }
 
@@ -447,19 +465,47 @@ hello(){
 
 help(){
     hello
-    echo "使用方法：bash $0 [-h] [-i] [-f] [-id] [-fd] [-is] [-fs] [-u] [-ud] [-us]"
+    echo "使用方法：bash $0 [-h] [-i] [-f] [-id] [-fd] [-is] [-fs] [-u] [-ud] [-us] [-r] [-a]"
     echo ""
     echo "  -h , --help                显示帮助信息"
     echo "  -i , --install             安装 Dnsmasq + SNI Proxy"
     echo "  -f , --fastinstall         快速安装 Dnsmasq + SNI Proxy"
     echo "  -id, --installdnsmasq      仅安装 Dnsmasq"
-    echo "  -id, --installdnsmasq      快速安装 Dnsmasq"
+    echo "  -fd, --fastinstalldnsmasq  快速安装 Dnsmasq"
     echo "  -is, --installsniproxy     仅安装 SNI Proxy"
     echo "  -fs, --fastinstallsniproxy 快速安装 SNI Proxy"
     echo "  -u , --uninstall           卸载 Dnsmasq + SNI Proxy"
     echo "  -ud, --undnsmasq           卸载 Dnsmasq"
     echo "  -us, --unsniproxy          卸载 SNI Proxy"
+    echo "  -r , --refresh             仅同步域名/配置与 geo 数据并重启服务"
+    echo "  -a , --auto-update         写入定时任务，每日自动执行一次 --refresh"
     echo ""
+}
+
+update_rules(){
+    [ -z "${publicip}" ] && publicip=$(get_ip)
+    echo -e "[${green}Info${plain}] 正在同步域名配置..."
+    sync_dnsmasq_rules "${publicip}"
+    sync_sniproxy_rules
+    if [ -d /etc/dnsmasq.d ]; then
+        sync_geodata
+    fi
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl restart dnsmasq > /dev/null 2>&1
+        systemctl restart sniproxy > /dev/null 2>&1
+    else
+        service dnsmasq restart > /dev/null 2>&1
+        service sniproxy restart > /dev/null 2>&1
+    fi
+    echo -e "[${green}Info${plain}] 域名规则与配置同步完成。"
+}
+
+enable_auto_update(){
+    local script_dir="$(cd "$(dirname "$0")" && pwd)"
+    local script_path="${script_dir}/$(basename "$0")"
+    local cron_line="0 4 * * * bash ${script_path} --refresh >/var/log/dns_sniproxy_update.log 2>&1"
+    (crontab -l 2>/dev/null | grep -v 'dns_sniproxy_update' ; echo "${cron_line}") | crontab -
+    echo -e "[${green}Info${plain}] 已写入每日 04:00 自动同步任务，可通过 crontab -l 查看。"
 }
 
 install_all(){
@@ -638,6 +684,14 @@ if [[ $# = 1 ]];then
         echo -e "${yellow}正在执行卸载SNI Proxy.${plain}"
         confirm
         unsniproxy
+        ;;
+        -r|--refresh)
+        hello
+        update_rules
+        ;;
+        -a|--auto-update)
+        hello
+        enable_auto_update
         ;;
         -h|--help|*)
         help

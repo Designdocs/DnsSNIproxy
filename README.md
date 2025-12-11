@@ -15,6 +15,12 @@ wget --no-check-certificate -O dns.sh https://raw.githubusercontent.com/Designdo
 wget --no-check-certificate -O dns.sh https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/dns.sh && bash dns.sh -u
 ```
 
+### 规则/域名同步（无需重装）：
+- 手动同步：`bash dns.sh -r`（刷新 dnsmasq/sniproxy 配置、域名列表，以及 geoip.dat / geosite.dat，自动重启服务）
+- 开启每日 04:00 自动同步：`bash dns.sh -a`
+
+> 域名列表与配置均来自本仓库（`proxy-domains.txt`、`dnsmasq.conf`、`sniproxy.conf`、`geoip.dat`、`geosite.dat`）。在仓库更新后，执行 `-r` 或等待定时任务即可下发到各 VPS，无需手动编辑 `/etc/dnsmasq.d/custom_netflix.conf` 或 `/etc/sniproxy.conf`。
+
 ### 使用方法：
 将代理主机的 DNS 地址设置为安装了 dnsmasq 的主机 IP 即可，如果遇到问题，尝试在配置文件中只保留一个 DNS 地址。
 
@@ -61,5 +67,5 @@ wget --no-check-certificate -O dns.sh https://raw.githubusercontent.com/Designdo
   systemctl restart systemd-resolved.service
   ```
 
-
-**在 dnsmasq_sniproxy_install 项目基础上二次开发**：https://github.com/Designdocs/DnsSNIproxy
+## 感谢
+**在 dnsmasq_sniproxy_install 项目基础上二次开发**：https://github.com/myxuchangbin/dnsmasq_sniproxy_install
