@@ -43,6 +43,7 @@ amazonvideo.com
 amctv.com
 angulardart.org
 anthropic.com
+api-p.videomarket.jp
 api.ai
 apigee.com
 appbridge.ca
@@ -75,6 +76,7 @@ blink.org
 blinkbox.com
 braze.com
 brightcove.com
+brightline.tv
 brocaproject.com
 brotli.org
 bumpshare.com
@@ -105,6 +107,7 @@ chromium.org
 chronicle.security
 chroniclesec.com
 chutes.ai
+cinemax.com
 claude.ai
 claude.com
 claudemcpclient.com
@@ -155,6 +158,7 @@ dialogflow.com
 dify.ai
 digitalassetlinks.org
 dilcdn.com
+discomax.com
 disney-asia.com
 disney-discount.com
 disney-plus.net
@@ -269,6 +273,7 @@ findyourlimits.com
 fitbit.com
 foofle.com
 footprint.net
+forthethrone.com
 fox.com
 freehulu.com
 froogle.com
@@ -553,10 +558,23 @@ gvt9.com
 haplorrhini.com
 happyon.jp
 hbo.com
+hbo.com.c.footprint.net
+hbo.com.edgesuite.net
+hbo.map.fastly.net
 hboasia.com
+hbogo.co.th
+hbogo.com
+hbogo.eu
 hbogoasia.com
+hbogoasia.hk
+hbogoasia.id
+hbogoasia.ph
+hbogoasia.sg
+hbogoasia.tw
+hbomax-images.warnermediacdn.com
 hbomax.com
 hbomaxcdn.com
+hbomaxdash.s.llnwi.net
 hbonow.com
 hdrplusdata.org
 heads-ak-spotify-com.akamaized.net
@@ -635,6 +653,7 @@ madewithcode.com
 makersuite.google.com
 material.io
 max.com
+maxgo.com
 maxmind.com
 mdialog.com
 media-amazon.com

@@ -28,7 +28,7 @@ wget --no-check-certificate -O dns.sh https://raw.githubusercontent.com/Designdo
 
 ### 定期拉取 AI/流媒体域名列表并推送
 - 拉取并去重写入 `proxy-domains.txt`：`bash update_proxy_domains.sh`
-- 默认分类：anthropic, cerebras, comfy, cursor, elevenlabs, google-deepmind, groq, huggingface, openai, perplexity, poe, xai, netflix, hulu, google-scholar, google, spotify, disney
+- 默认分类：anthropic, cerebras, comfy, cursor, elevenlabs, google-deepmind, groq, huggingface, openai, perplexity, poe, xai, hbo, dmm, netflix, hulu, google-scholar, google, spotify, disney
 - 每日 04:35 自动更新示例：`(crontab -l 2>/dev/null; echo "35 4 * * * cd $(pwd) && bash update_proxy_domains.sh >/tmp/update_proxy_domains.log 2>&1") | crontab -`
 - 更新后 `git add proxy-domains.txt && git commit && git push`，服务器端 `bash dns.sh -r` 或等待自动同步即可下发。
 

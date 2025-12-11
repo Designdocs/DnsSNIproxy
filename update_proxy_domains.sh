@@ -24,6 +24,8 @@ CATEGORIES=(
     perplexity
     poe
     xai
+    hbo
+    dmm
     netflix
     hulu
     google-scholar
