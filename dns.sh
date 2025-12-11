@@ -250,7 +250,7 @@ compile_dnsmasq(){
         rm -rf /tmp/dnsmasq-2.91
     fi
     cd /tmp/
-    download dnsmasq-2.91.tar.gz https://thekelleys.org.uk/dnsmasq/dnsmasq-2.91.tar.gz
+    download dnsmasq-2.91.tar.gz https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/dnsmasq-2.91.tar.gz
     tar -zxf dnsmasq-2.91.tar.gz
     cd dnsmasq-2.91
     make all-i18n V=s COPTS='-DHAVE_DNSSEC -DHAVE_IDN -DHAVE_CONNTRACK -DHAVE_DBUS'
@@ -278,8 +278,8 @@ install_dnsmasq(){
         yes|cp -f /tmp/dnsmasq-2.91/src/dnsmasq /usr/sbin/dnsmasq && chmod +x /usr/sbin/dnsmasq
     fi
     [ ! -f /usr/sbin/dnsmasq ] && echo -e "[${red}Error${plain}] 安装dnsmasq出现问题，请检查." && exit 1
-    download /etc/dnsmasq.d/custom_netflix.conf https://raw.githubusercontent.com/myxuchangbin/dnsmasq_sniproxy_install/master/dnsmasq.conf
-    download /tmp/proxy-domains.txt https://raw.githubusercontent.com/myxuchangbin/dnsmasq_sniproxy_install/master/proxy-domains.txt
+    download /etc/dnsmasq.d/custom_netflix.conf https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/dnsmasq.conf
+    download /tmp/proxy-domains.txt https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/proxy-domains.txt
     for domain in $(cat /tmp/proxy-domains.txt); do
         printf "address=/${domain}/${publicip}\n"\
         | tee -a /etc/dnsmasq.d/custom_netflix.conf > /dev/null 2>&1
@@ -331,14 +331,14 @@ install_sniproxy(){
         if [ -e sniproxy-0.6.1 ]; then
             rm -rf sniproxy-0.6.1
         fi
-        download /tmp/sniproxy-0.6.1.tar.gz https://github.com/dlundquist/sniproxy/archive/refs/tags/0.6.1.tar.gz
+        download /tmp/sniproxy-0.6.1.tar.gz https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/sniproxy/sniproxy-0.6.1.tar.gz
         tar -zxf sniproxy-0.6.1.tar.gz
         cd sniproxy-0.6.1
     fi
     if check_sys packageManager yum; then
         if [[ ${fastmode} = "1" ]]; then
             if [[ ${bit} = "x86_64" ]]; then
-                download /tmp/sniproxy-0.6.1-1.el8.x86_64.rpm https://github.com/myxuchangbin/dnsmasq_sniproxy_install/raw/master/sniproxy/sniproxy-0.6.1-1.el8.x86_64.rpm
+                download /tmp/sniproxy-0.6.1-1.el8.x86_64.rpm https://github.com/Designdocs/DnsSNIproxy/raw/main/sniproxy/sniproxy-0.6.1-1.el8.x86_64.rpm
                 error_detect_depends "yum -y install /tmp/sniproxy-0.6.1-1.el8.x86_64.rpm"
                 rm -f /tmp/sniproxy-0.6.1-1.el8.x86_64.rpm
             else
@@ -354,17 +354,17 @@ install_sniproxy(){
             fi
         fi
         if centosversion 6; then
-            download /etc/init.d/sniproxy https://raw.githubusercontent.com/dlundquist/sniproxy/master/redhat/sniproxy.init && chmod +x /etc/init.d/sniproxy
+            download /etc/init.d/sniproxy https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/sniproxy.init && chmod +x /etc/init.d/sniproxy
             [ ! -f /etc/init.d/sniproxy ] && echo -e "[${red}Error${plain}] 下载Sniproxy启动文件出现问题，请检查." && exit 1
         else
-            download /etc/systemd/system/sniproxy.service https://raw.githubusercontent.com/myxuchangbin/dnsmasq_sniproxy_install/master/sniproxy.service
+            download /etc/systemd/system/sniproxy.service https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/sniproxy.service
             systemctl daemon-reload
             [ ! -f /etc/systemd/system/sniproxy.service ] && echo -e "[${red}Error${plain}] 下载Sniproxy启动文件出现问题，请检查." && exit 1
         fi
     elif check_sys packageManager apt; then
         if [[ ${fastmode} = "1" ]]; then
             if [[ ${bit} = "x86_64" ]]; then
-                download /tmp/sniproxy_0.6.1_amd64.deb https://github.com/myxuchangbin/dnsmasq_sniproxy_install/raw/master/sniproxy/sniproxy_0.6.1_amd64.deb
+                download /tmp/sniproxy_0.6.1_amd64.deb https://github.com/Designdocs/DnsSNIproxy/raw/main/sniproxy/sniproxy_0.6.1_amd64.deb
                 error_detect_depends "dpkg -i --no-debsig /tmp/sniproxy_0.6.1_amd64.deb"
                 rm -f /tmp/sniproxy_0.6.1_amd64.deb
             else
@@ -373,13 +373,13 @@ install_sniproxy(){
         else
             env NAME="sniproxy" DEBFULLNAME="sniproxy" DEBEMAIL="sniproxy@example.com" EMAIL="sniproxy@example.com" ./autogen.sh && ./configure --prefix=/usr && make && make install
         fi  
-        download /etc/systemd/system/sniproxy.service https://raw.githubusercontent.com/myxuchangbin/dnsmasq_sniproxy_install/master/sniproxy.service
+        download /etc/systemd/system/sniproxy.service https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/sniproxy.service
         systemctl daemon-reload
         [ ! -f /etc/systemd/system/sniproxy.service ] && echo -e "[${red}Error${plain}] 下载Sniproxy启动文件出现问题，请检查." && exit 1
     fi
     [ ! -f /usr/sbin/sniproxy ] && echo -e "[${red}Error${plain}] 安装Sniproxy出现问题，请检查." && exit 1
-    download /etc/sniproxy.conf https://raw.githubusercontent.com/myxuchangbin/dnsmasq_sniproxy_install/master/sniproxy.conf
-    download /tmp/sniproxy-domains.txt https://raw.githubusercontent.com/myxuchangbin/dnsmasq_sniproxy_install/master/proxy-domains.txt
+    download /etc/sniproxy.conf https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/sniproxy.conf
+    download /tmp/sniproxy-domains.txt https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/proxy-domains.txt
     sed -i -e 's/\./\\\./g' -e 's/^/    \.\*/' -e 's/$/\$ \*/' /tmp/sniproxy-domains.txt || (echo -e "[${red}Error:${plain}] Failed to configuration sniproxy." && exit 1)
     sed -i '/table {/r /tmp/sniproxy-domains.txt' /etc/sniproxy.conf || (echo -e "[${red}Error:${plain}] Failed to configuration sniproxy." && exit 1)
     if [ ! -e /var/log/sniproxy ]; then

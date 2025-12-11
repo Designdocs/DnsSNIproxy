@@ -1,43 +1,18 @@
-# Dnsmasq SNIproxy One-click Install
-
-### 脚本概述：
-
-* 原理简述：利用[Dnsmasq](http://thekelleys.org.uk/dnsmasq/doc.html)的DNS功能，将特定网站的DNS解析重定向到[SNIproxy](https://github.com/dlundquist/sniproxy)反向代理。
-
-* 用途：让访问流媒体受限的VPS突破限制，前提是要有一个能流媒体的VPS。
-
-* 特性：脚本默认解锁`Netflix Hulu HBO`[等](https://github.com/myxuchangbin/dnsmasq_sniproxy_install/blob/master/proxy-domains.txt)，如需增删流媒体域名请编辑文件`/etc/dnsmasq.d/custom_netflix.conf`和`/etc/sniproxy.conf`
-
-* 脚本支持系统：CentOS7+, Debian9+, Ubuntu18+
-    * 如果脚本最后显示的IP和实际公网IP不符，请修改一下文件`/etc/sniproxy.conf`中的IP地址
-
-### 脚本用法：
-
-    bash dnsmasq_sniproxy.sh [-h] [-i] [-f] [-id] [-fd] [-is] [-fs] [-u] [-ud] [-us]
-      -h , --help                显示帮助信息
-      -i , --install             安装 Dnsmasq + SNI Proxy
-      -f , --fastinstall         快速安装 Dnsmasq + SNI Proxy
-      -id, --installdnsmasq      仅安装 Dnsmasq
-      -fd, --installdnsmasq      快速安装 Dnsmasq
-      -is, --installsniproxy     仅安装 SNI Proxy
-      -fs, --fastinstallsniproxy 快速安装 SNI Proxy
-      -u , --uninstall           卸载 Dnsmasq + SNI Proxy
-      -ud, --undnsmasq           卸载 Dnsmasq
-      -us, --unsniproxy          卸载 SNI Proxy
+## 自用
 
 ### 快速安装（推荐）：
 ``` Bash
-wget --no-check-certificate -O dnsmasq_sniproxy.sh https://raw.githubusercontent.com/myxuchangbin/dnsmasq_sniproxy_install/master/dnsmasq_sniproxy.sh && bash dnsmasq_sniproxy.sh -f
+wget --no-check-certificate -O dns.sh https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/dns.sh && bash dns.sh -f
 ```
 
 ### 普通安装：
 ``` Bash
-wget --no-check-certificate -O dnsmasq_sniproxy.sh https://raw.githubusercontent.com/myxuchangbin/dnsmasq_sniproxy_install/master/dnsmasq_sniproxy.sh && bash dnsmasq_sniproxy.sh -i
+wget --no-check-certificate -O dns.sh https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/dns.sh && bash dns.sh -i
 ```
 
 ### 卸载方法：
 ``` Bash
-wget --no-check-certificate -O dnsmasq_sniproxy.sh https://raw.githubusercontent.com/myxuchangbin/dnsmasq_sniproxy_install/master/dnsmasq_sniproxy.sh && bash dnsmasq_sniproxy.sh -u
+wget --no-check-certificate -O dns.sh https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/dns.sh && bash dns.sh -u
 ```
 
 ### 使用方法：
@@ -85,3 +60,6 @@ wget --no-check-certificate -O dnsmasq_sniproxy.sh https://raw.githubusercontent
   ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
   systemctl restart systemd-resolved.service
   ```
+
+
+**在 dnsmasq_sniproxy_install 项目基础上二次开发**：https://github.com/Designdocs/DnsSNIproxy
