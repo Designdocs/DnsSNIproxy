@@ -85,6 +85,71 @@ bash update_geodata.sh
   systemctl restart systemd-resolved.service
   ```
 
+- 如果要切换端口
+  配置文件：`/etc/dnsmasq.d/` 中新增 
+
+  ```
+  00-global-proxy.conf
+
+  # 全局禁用 IPv6，避免客户端绕过
+  address=/#/::
+  ```
+
+  ```
+  99-port.conf
+
+  # 监听端口（因为云商封了 UDP/53，所以改为 8853）
+  port=8853
+  ```
+
+  ```
+  systemctl restart dnsmasq
+  systemctl status dnsmasq
+  ss -lntup | grep dnsmasq
+
+  ```
+
+  配置文件：/etc/sniproxy.conf
+
+   ```
+  user daemon
+  pidfile /var/tmp/sniproxy.pid
+
+  error_log {
+      syslog daemon
+      priority notice
+  }
+
+  resolver {
+      nameserver 8.8.8.8
+      nameserver 8.8.4.4 # local dns should be better
+      mode ipv4_only
+  }
+  listener 0.0.0.0:80 {
+      proto http
+      access_log {
+          filename /var/log/sniproxy/http_access.log
+          priority notice
+      }
+  }
+  listener 0.0.0.0:443 {
+      proto tls
+      access_log {
+          filename /var/log/sniproxy/https_access.log
+          priority notice
+      }
+  }
+
+  table {
+      .* *
+  }
+  ```
+
+  ```
+  systemctl restart sniproxy
+  systemctl status sniproxy
+  ```
+
 ## 感谢
 - **在 dnsmasq_sniproxy_install 项目基础上二次开发**：https://github.com/myxuchangbin/dnsmasq_sniproxy_install
 - https://github.com/v2fly/domain-list-community/
