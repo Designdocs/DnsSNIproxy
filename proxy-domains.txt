@@ -712,6 +712,8 @@ on2.com
 onefifteen.net
 onefifteen.org
 oneworldmanystories.com
+opal.google
+opal.google.com
 open.live.bbc.co.uk
 openai.com
 openai.com.cdn.cloudflare.net
