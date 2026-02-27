@@ -22,7 +22,7 @@ wget --no-check-certificate -O dns.sh https://raw.githubusercontent.com/Designdo
 # 手动同步配置/域名/geo 数据
 bash dns.sh -r
 
-# 开启每日 04:00 自动同步
+# 开启每日自动任务（04:00 同步配置；04:30 更新 geodata 与域名列表）
 bash dns.sh -a
 
 # 拉取并去重 AI/流媒体域名
@@ -38,10 +38,8 @@ bash update_geodata.sh
 
 
 ### 定时任务示例（本地）
-- geodata 每日 04:30：
-   `(crontab -l 2>/dev/null; echo "30 4 * * * cd $(pwd) && bash update_geodata.sh >/tmp/update_geodata.log 2>&1") | crontab -`
-- 域名列表每日 04:35：
-   `(crontab -l 2>/dev/null; echo "35 4 * * * cd $(pwd) && bash update_proxy_domains.sh >/tmp/update_proxy_domains.log 2>&1") | crontab -`
+- 每日 04:30 顺序更新 geodata 与域名列表：
+   `(crontab -l 2>/dev/null; echo "30 4 * * * cd $(pwd) && bash update_geodata.sh >/tmp/update_geodata.log 2>&1 && bash update_proxy_domains.sh >/tmp/update_proxy_domains.log 2>&1") | crontab -`
 
 
 ### 使用方法：

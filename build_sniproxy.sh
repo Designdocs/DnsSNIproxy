@@ -80,21 +80,21 @@ centosversion(){
 }
 
 download(){
-    local filename=${1}
+    local filename="$1"
+    local url="$2"
     echo -e "[${green}Info${plain}] ${filename} download configuration now..."
-    wget --no-check-certificate -q -t3 -T60 -O ${1} ${2}
-    if [ $? -ne 0 ]; then
+    if ! wget --no-check-certificate -q -t3 -T60 -O "${filename}" "${url}"; then
         echo -e "[${red}Error${plain}] Download ${filename} failed."
         exit 1
     fi
 }
 
 error_detect_depends(){
-    local command=$1
-    local depend=`echo "${command}" | awk '{print $4}'`
+    local command="$1"
+    local depend
+    depend=$(echo "${command}" | awk '{print $4}')
     echo -e "[${green}Info${plain}] Starting to install package ${depend}"
-    ${command} > /dev/null 2>&1
-    if [ $? -ne 0 ]; then
+    if ! ${command} > /dev/null 2>&1; then
         echo -e "[${red}Error${plain}] Failed to install ${red}${depend}${plain}"
         exit 1
     fi
@@ -141,7 +141,7 @@ install_dependencies(){
     fi
 }
 install_dependencies
-bit=`uname -m`
+bit=$(uname -m)
 cd /tmp
 if [ -e sniproxy-0.6.1 ]; then
     rm -rf sniproxy-0.6.1

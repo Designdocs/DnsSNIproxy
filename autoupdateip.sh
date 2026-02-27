@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
 export PATH
 
@@ -32,13 +32,14 @@ if ! command -v wget >/dev/null 2>&1; then
 fi
 
 get_ip(){
-    local IP=$( ip addr | egrep -o '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | egrep -v "^192\.168|^172\.1[6-9]\.|^172\.2[0-9]\.|^172\.3[0-2]\.|^10\.|^127\.|^255\.|^0\." | head -n 1 )
-    [ -z ${IP} ] && IP=$( wget -qO- -t1 -T2 ipv4.icanhazip.com )
-    [ -z ${IP} ] && IP=$( wget -qO- -t1 -T2 ipinfo.io/ip )
-    echo ${IP}
+    local IP
+    IP=$( ip addr | egrep -o '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | egrep -v "^192\.168|^172\.1[6-9]\.|^172\.2[0-9]\.|^172\.3[0-2]\.|^10\.|^127\.|^255\.|^0\." | head -n 1 )
+    [ -z "${IP}" ] && IP=$( wget -qO- -t1 -T2 ipv4.icanhazip.com )
+    [ -z "${IP}" ] && IP=$( wget -qO- -t1 -T2 ipinfo.io/ip )
+    echo "${IP}"
 }
 
-if  [ -n "$1" ] ;then
+if [ -n "${1:-}" ]; then
     if ! command -v dig >/dev/null 2>&1; then 
         if [[ x"${release}" == x"centos" ]]; then
             yum install -y bind-utils
@@ -48,20 +49,20 @@ if  [ -n "$1" ] ;then
             apt install -y dnsutils
         fi
     fi
-    ddns="$@"
-    newip=`dig -t A +noquestion +noadditional +noauthority +tcp @8.8.8.8 ${ddns} | awk '/IN[ \t]+A/{print $NF}'`
+    ddns="$*"
+    newip=$(dig -t A +noquestion +noadditional +noauthority +tcp @8.8.8.8 "${ddns}" | awk '/IN[ \t]+A/{print $NF}')
 else
     newip=$(get_ip)
 fi
 
 file=/etc/dnsmasq.d/custom_netflix.conf
-[ ! -e ${file} ] && echo "[Error] dnsmasq配置文件不存在，请检查" && exit 1
+[ ! -e "${file}" ] && echo "[Error] dnsmasq配置文件不存在，请检查" && exit 1
 IPREX='([0-9]{1,2}|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\.([0-9]{1,2}|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\.([0-9]{1,2}|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\.([0-9]{1,2}|1[0-9][0-9]|2[0-4][0-9]|25[0-5])'
-time=`date +"%Y-%m-%d-%H:%M"`
-oldip=`grep netflix.com ${file}|grep -Eo "$IPREX"|tail -n1`
+time=$(date +"%Y-%m-%d-%H:%M")
+oldip=$(grep netflix.com "${file}" | grep -Eo "${IPREX}" | tail -n1)
 
-if [ $oldip != $newip ]; then
-    sed -i "s/$oldip/$newip/g" ${file}
+if [ "${oldip}" != "${newip}" ]; then
+    sed -i "s/${oldip}/${newip}/g" "${file}"
     systemctl restart dnsmasq
     [ -e /tmp/autochangeip.log ] || touch /tmp/autochangeip.log
     echo "${time} - ${oldip} updated to ${newip}" >> /tmp/autochangeip.log

@@ -8,6 +8,8 @@ yellow='\033[0;33m'
 plain='\033[0m'
 repo_base_url="https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main"
 geodata_dir="/etc/dnsmasq.d/geodata"
+dnsmasq_domain_list="/tmp/proxy-domains.txt"
+sniproxy_domain_list="/tmp/sniproxy-domains.txt"
 
 [[ $EUID -ne 0 ]] && echo -e "[${red}Error${plain}] 请使用root用户来执行脚本!" && exit 1
 
@@ -87,10 +89,11 @@ centosversion(){
 }
 
 get_ip(){
-    local IP=$( ip addr | egrep -o '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | egrep -v "^192\.168|^172\.1[6-9]\.|^172\.2[0-9]\.|^172\.3[0-2]\.|^10\.|^127\.|^255\.|^0\." | head -n 1 )
-    [ -z ${IP} ] && IP=$( wget -qO- -t1 -T2 ipv4.icanhazip.com )
-    [ -z ${IP} ] && IP=$( wget -qO- -t1 -T2 ipinfo.io/ip )
-    echo ${IP}
+    local IP
+    IP=$( ip addr | egrep -o '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | egrep -v "^192\.168|^172\.1[6-9]\.|^172\.2[0-9]\.|^172\.3[0-2]\.|^10\.|^127\.|^255\.|^0\." | head -n 1 )
+    [ -z "${IP}" ] && IP=$( wget -qO- -t1 -T2 ipv4.icanhazip.com )
+    [ -z "${IP}" ] && IP=$( wget -qO- -t1 -T2 ipinfo.io/ip )
+    echo "${IP}"
 }
 
 check_ip(){
@@ -110,33 +113,34 @@ check_ip(){
 }
 
 download(){
-    local filename=${1}
+    local filename="$1"
+    local url="$2"
     echo -e "[${green}Info${plain}] ${filename} download configuration now..."
-    wget --no-check-certificate -q -t3 -T60 -O ${1} ${2}
-    if [ $? -ne 0 ]; then
+    if ! wget --no-check-certificate -q -t3 -T60 -O "${filename}" "${url}"; then
         echo -e "[${red}Error${plain}] Download ${filename} failed."
         exit 1
     fi
 }
 
 sync_dnsmasq_rules(){
-    local target_ip=${1}
+    local target_ip="$1"
     download /etc/dnsmasq.d/custom_netflix.conf "${repo_base_url}/dnsmasq.conf"
-    download /tmp/proxy-domains.txt "${repo_base_url}/proxy-domains.txt"
-    for domain in $(cat /tmp/proxy-domains.txt); do
+    download "${dnsmasq_domain_list}" "${repo_base_url}/proxy-domains.txt"
+    while IFS= read -r domain; do
+        [ -z "${domain}" ] && continue
         printf "address=/%s/%s\n" "${domain}" "${target_ip}" \
         | tee -a /etc/dnsmasq.d/custom_netflix.conf > /dev/null 2>&1
-    done
+    done < "${dnsmasq_domain_list}"
     echo "port=53" > /etc/dnsmasq.d/99-port.conf
-    rm -f /tmp/proxy-domains.txt
+    rm -f "${dnsmasq_domain_list}"
 }
 
 sync_sniproxy_rules(){
     download /etc/sniproxy.conf "${repo_base_url}/sniproxy.conf"
-    download /tmp/sniproxy-domains.txt "${repo_base_url}/proxy-domains.txt"
-    sed -i -e 's/\./\\\./g' -e 's/^/    \.\*/' -e 's/$/\$ \*/' /tmp/sniproxy-domains.txt || (echo -e "[${red}Error:${plain}] Failed to configuration sniproxy." && exit 1)
-    sed -i '/table {/r /tmp/sniproxy-domains.txt' /etc/sniproxy.conf || (echo -e "[${red}Error:${plain}] Failed to configuration sniproxy." && exit 1)
-    rm -f /tmp/sniproxy-domains.txt
+    download "${sniproxy_domain_list}" "${repo_base_url}/proxy-domains.txt"
+    sed -i -e 's/\./\\\./g' -e 's/^/    \.\*/' -e 's/$/\$ \*/' "${sniproxy_domain_list}" || (echo -e "[${red}Error:${plain}] Failed to configuration sniproxy." && exit 1)
+    sed -i "/table {/r ${sniproxy_domain_list}" /etc/sniproxy.conf || (echo -e "[${red}Error:${plain}] Failed to configuration sniproxy." && exit 1)
+    rm -f "${sniproxy_domain_list}"
 }
 
 sync_geodata(){
@@ -146,13 +150,118 @@ sync_geodata(){
 }
 
 error_detect_depends(){
-    local command=$1
-    local depend=`echo "${command}" | awk '{print $4}'`
+    local command="$1"
+    local depend
+    depend=$(echo "${command}" | awk '{print $4}')
     echo -e "[${green}Info${plain}] Starting to install package ${depend}"
-    ${command} > /dev/null 2>&1
-    if [ $? -ne 0 ]; then
+    if ! ${command} > /dev/null 2>&1; then
         echo -e "[${red}Error${plain}] Failed to install ${red}${depend}${plain}"
         exit 1
+    fi
+}
+
+ensure_port_check_tool(){
+    if command -v ss >/dev/null 2>&1 || command -v netstat >/dev/null 2>&1; then
+        return 0
+    fi
+
+    echo -e "[${yellow}Warning${plain}] Neither ss nor netstat found, trying to install net-tools..."
+    if check_sys packageManager yum; then
+        yum -y install net-tools > /dev/null 2>&1 || true
+    elif check_sys packageManager apt; then
+        apt-get -y install net-tools > /dev/null 2>&1 || true
+    fi
+
+    if command -v ss >/dev/null 2>&1 || command -v netstat >/dev/null 2>&1; then
+        return 0
+    fi
+
+    echo -e "[${red}Error${plain}] Cannot check ports because neither ss nor netstat is available."
+    exit 1
+}
+
+is_tcp_port_in_use(){
+    local port="$1"
+    if command -v ss >/dev/null 2>&1; then
+        ss -lnt 2>/dev/null | awk -v p=":${port}" 'NR>1 && $4 ~ (p "$") {found=1} END {exit found?0:1}'
+    elif command -v netstat >/dev/null 2>&1; then
+        netstat -lnt 2>/dev/null | awk -v p=":${port}" 'NR>2 && $4 ~ (p "$") {found=1} END {exit found?0:1}'
+    else
+        return 1
+    fi
+}
+
+is_systemd_resolved_using_port_53(){
+    if command -v ss >/dev/null 2>&1; then
+        ss -lntup 2>/dev/null | grep -E ':53[[:space:]]' | grep -Eq 'systemd-resolve|systemd-resolved'
+    elif command -v netstat >/dev/null 2>&1; then
+        netstat -lntup 2>/dev/null | grep -E ':53[[:space:]]' | grep -Eq 'systemd-resolve|systemd-resolved'
+    else
+        return 1
+    fi
+}
+
+set_resolved_conf_option(){
+    local key="$1"
+    local value="$2"
+    local conf_file="/etc/systemd/resolved.conf"
+
+    if grep -Eq "^[[:space:]]*#?[[:space:]]*${key}=" "${conf_file}"; then
+        sed -i -E "s|^[[:space:]]*#?[[:space:]]*${key}=.*|${key}=${value}|" "${conf_file}"
+    else
+        if ! grep -Eq '^[[:space:]]*\[Resolve\][[:space:]]*$' "${conf_file}"; then
+            echo "" >> "${conf_file}"
+            echo "[Resolve]" >> "${conf_file}"
+        fi
+        echo "${key}=${value}" >> "${conf_file}"
+    fi
+}
+
+resolve_systemd_port_53_conflict(){
+    local conf_file="/etc/systemd/resolved.conf"
+
+    if [ ! -f "${conf_file}" ]; then
+        echo -e "[${yellow}Warning${plain}] ${conf_file} not found, cannot auto-fix systemd-resolved."
+        return 1
+    fi
+
+    echo -e "[${green}Info${plain}] systemd-resolved is occupying port 53, applying resolved.conf fix..."
+    set_resolved_conf_option "DNS" "8.8.8.8 1.1.1.1"
+    set_resolved_conf_option "DNSStubListener" "no"
+    systemctl restart systemd-resolved > /dev/null 2>&1 || return 1
+
+    if [ -f /run/systemd/resolve/resolv.conf ]; then
+        ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+    fi
+
+    return 0
+}
+
+ensure_dns_port_53_available(){
+    if ! is_tcp_port_in_use 53; then
+        return 0
+    fi
+
+    if command -v systemctl >/dev/null 2>&1 \
+        && systemctl is-active --quiet systemd-resolved \
+        && is_systemd_resolved_using_port_53; then
+        if resolve_systemd_port_53_conflict && ! is_tcp_port_in_use 53; then
+            echo -e "[${green}Info${plain}] Port 53 released after systemd-resolved reconfiguration."
+            return 0
+        fi
+    fi
+
+    echo -e "[${red}Error${plain}] required port 53 already in use\n"
+    return 1
+}
+
+restart_dns_services(){
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl restart dnsmasq > /dev/null 2>&1
+        systemctl restart sniproxy > /dev/null 2>&1
+    else
+        service dnsmasq restart > /dev/null 2>&1
+        service sniproxy restart > /dev/null 2>&1
     fi
 }
 
@@ -290,7 +399,7 @@ compile_dnsmasq(){
 }
 
 install_dnsmasq(){
-    netstat -a -n -p | grep LISTEN | grep -P "\d+\.\d+\.\d+\.\d+:53\s+" > /dev/null && echo -e "[${red}Error${plain}] required port 53 already in use\n" && exit 1
+    ensure_dns_port_53_available
     echo "安装Dnsmasq..."
     if check_sys packageManager yum; then
         error_detect_depends "yum -y install dnsmasq"
@@ -333,7 +442,7 @@ install_dnsmasq(){
 
 install_sniproxy(){
     for aport in 80 443; do
-        netstat -a -n -p | grep LISTEN | grep -P "\d+\.\d+\.\d+\.\d+:${aport}\s+" > /dev/null && echo -e "[${red}Error${plain}] required port ${aport} already in use\n" && exit 1
+        is_tcp_port_in_use "${aport}" && echo -e "[${red}Error${plain}] required port ${aport} already in use\n" && exit 1
     done
     install_dependencies
     echo "安装SNI Proxy..."
@@ -443,13 +552,12 @@ ready_install(){
     fi
     if check_sys packageManager yum; then
         yum makecache
-        error_detect_depends "yum -y install net-tools"
         error_detect_depends "yum -y install wget"
     elif check_sys packageManager apt; then
         apt update
-        error_detect_depends "apt-get -y install net-tools"
         error_detect_depends "apt-get -y install wget"
     fi
+    ensure_port_check_tool
     disable_selinux
     if check_sys packageManager yum; then
         config_firewall
@@ -479,7 +587,7 @@ help(){
     echo "  -ud, --undnsmasq           卸载 Dnsmasq"
     echo "  -us, --unsniproxy          卸载 SNI Proxy"
     echo "  -r , --refresh             仅同步域名/配置与 geo 数据并重启服务"
-    echo "  -a , --auto-update         写入定时任务，每日自动执行一次 --refresh"
+    echo "  -a , --auto-update         写入定时任务：每日 04:00 执行 --refresh，04:30 更新 geodata 与域名列表"
     echo ""
 }
 
@@ -491,22 +599,19 @@ update_rules(){
     if [ -d /etc/dnsmasq.d ]; then
         sync_geodata
     fi
-    if command -v systemctl >/dev/null 2>&1; then
-        systemctl restart dnsmasq > /dev/null 2>&1
-        systemctl restart sniproxy > /dev/null 2>&1
-    else
-        service dnsmasq restart > /dev/null 2>&1
-        service sniproxy restart > /dev/null 2>&1
-    fi
+    restart_dns_services
     echo -e "[${green}Info${plain}] 域名规则与配置同步完成。"
 }
 
 enable_auto_update(){
     local script_dir="$(cd "$(dirname "$0")" && pwd)"
     local script_path="${script_dir}/$(basename "$0")"
-    local cron_line="0 4 * * * bash ${script_path} --refresh >/var/log/dns_sniproxy_update.log 2>&1"
-    (crontab -l 2>/dev/null | grep -v 'dns_sniproxy_update' ; echo "${cron_line}") | crontab -
-    echo -e "[${green}Info${plain}] 已写入每日 04:00 自动同步任务，可通过 crontab -l 查看。"
+    local refresh_cron_line="0 4 * * * bash ${script_path} --refresh >/var/log/dns_sniproxy_update.log 2>&1"
+    local data_update_cron_line="30 4 * * * cd ${script_dir} && bash ./update_geodata.sh >/tmp/update_geodata.log 2>&1 && bash ./update_proxy_domains.sh >/tmp/update_proxy_domains.log 2>&1"
+    local cron_filter_pattern='dns_sniproxy_update|update_geodata\.log|update_proxy_domains\.log'
+
+    (crontab -l 2>/dev/null | grep -Ev "${cron_filter_pattern}" ; echo "${refresh_cron_line}" ; echo "${data_update_cron_line}") | crontab -
+    echo -e "[${green}Info${plain}] 已写入每日 04:00 自动同步任务与 04:30 数据更新任务，可通过 crontab -l 查看。"
 }
 
 install_all(){
