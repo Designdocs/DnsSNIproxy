@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 export PATH
 
@@ -90,9 +91,9 @@ centosversion(){
 
 get_ip(){
     local IP
-    IP=$( ip addr | egrep -o '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | egrep -v "^192\.168|^172\.1[6-9]\.|^172\.2[0-9]\.|^172\.3[0-2]\.|^10\.|^127\.|^255\.|^0\." | head -n 1 )
-    [ -z "${IP}" ] && IP=$( wget -qO- -t1 -T2 ipv4.icanhazip.com )
-    [ -z "${IP}" ] && IP=$( wget -qO- -t1 -T2 ipinfo.io/ip )
+    IP=$(ip addr | egrep -o '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | egrep -v "^192\.168|^172\.1[6-9]\.|^172\.2[0-9]\.|^172\.3[0-2]\.|^10\.|^127\.|^255\.|^0\." | head -n 1 || true)
+    [ -z "${IP}" ] && IP=$(wget -qO- -t1 -T2 ipv4.icanhazip.com || true)
+    [ -z "${IP}" ] && IP=$(wget -qO- -t1 -T2 ipinfo.io/ip || true)
     echo "${IP}"
 }
 
@@ -150,11 +151,10 @@ sync_geodata(){
 }
 
 error_detect_depends(){
-    local command="$1"
     local depend
-    depend=$(echo "${command}" | awk '{print $4}')
+    depend="${*: -1}"
     echo -e "[${green}Info${plain}] Starting to install package ${depend}"
-    if ! ${command} > /dev/null 2>&1; then
+    if ! "$@" > /dev/null 2>&1; then
         echo -e "[${red}Error${plain}] Failed to install ${red}${depend}${plain}"
         exit 1
     fi
@@ -180,25 +180,56 @@ ensure_port_check_tool(){
     exit 1
 }
 
-is_tcp_port_in_use(){
-    local port="$1"
-    if command -v ss >/dev/null 2>&1; then
-        ss -lnt 2>/dev/null | awk -v p=":${port}" 'NR>1 && $4 ~ (p "$") {found=1} END {exit found?0:1}'
-    elif command -v netstat >/dev/null 2>&1; then
-        netstat -lnt 2>/dev/null | awk -v p=":${port}" 'NR>2 && $4 ~ (p "$") {found=1} END {exit found?0:1}'
-    else
+is_port_in_use(){
+    local proto="$1"
+    local port="$2"
+
+    if [ "${proto}" != "tcp" ] && [ "${proto}" != "udp" ]; then
         return 1
     fi
+
+    if command -v ss >/dev/null 2>&1; then
+        if [ "${proto}" = "tcp" ]; then
+            if ss -lnt 2>/dev/null | awk -v p=":${port}" 'NR>1 && $4 ~ (p "$") {found=1} END {exit found?0:1}'; then
+                return 0
+            fi
+        else
+            if ss -lnu 2>/dev/null | awk -v p=":${port}" 'NR>1 && $4 ~ (p "$") {found=1} END {exit found?0:1}'; then
+                return 0
+            fi
+        fi
+        return 1
+    fi
+
+    if command -v netstat >/dev/null 2>&1; then
+        if [ "${proto}" = "tcp" ]; then
+            if netstat -lnt 2>/dev/null | awk -v p=":${port}" 'NR>2 && $4 ~ (p "$") {found=1} END {exit found?0:1}'; then
+                return 0
+            fi
+        else
+            if netstat -lnu 2>/dev/null | awk -v p=":${port}" 'NR>2 && $4 ~ (p "$") {found=1} END {exit found?0:1}'; then
+                return 0
+            fi
+        fi
+        return 1
+    fi
+
+    return 1
 }
 
 is_systemd_resolved_using_port_53(){
     if command -v ss >/dev/null 2>&1; then
-        ss -lntup 2>/dev/null | grep -E ':53[[:space:]]' | grep -Eq 'systemd-resolve|systemd-resolved'
+        if ss -lntup 2>/dev/null | grep -E ':53[[:space:]]' | grep -Eq 'systemd-resolve|systemd-resolved'; then
+            return 0
+        fi
+        return 1
     elif command -v netstat >/dev/null 2>&1; then
-        netstat -lntup 2>/dev/null | grep -E ':53[[:space:]]' | grep -Eq 'systemd-resolve|systemd-resolved'
-    else
+        if netstat -lntup 2>/dev/null | grep -E ':53[[:space:]]' | grep -Eq 'systemd-resolve|systemd-resolved'; then
+            return 0
+        fi
         return 1
     fi
+    return 1
 }
 
 set_resolved_conf_option(){
@@ -238,14 +269,16 @@ resolve_systemd_port_53_conflict(){
 }
 
 ensure_dns_port_53_available(){
-    if ! is_tcp_port_in_use 53; then
+    if ! is_port_in_use tcp 53 && ! is_port_in_use udp 53; then
         return 0
     fi
 
     if command -v systemctl >/dev/null 2>&1 \
         && systemctl is-active --quiet systemd-resolved \
         && is_systemd_resolved_using_port_53; then
-        if resolve_systemd_port_53_conflict && ! is_tcp_port_in_use 53; then
+        if resolve_systemd_port_53_conflict \
+            && ! is_port_in_use tcp 53 \
+            && ! is_port_in_use udp 53; then
             echo -e "[${green}Info${plain}] Port 53 released after systemd-resolved reconfiguration."
             return 0
         fi
@@ -267,11 +300,9 @@ restart_dns_services(){
 
 config_firewall(){
     if centosversion 6; then
-        /etc/init.d/iptables status > /dev/null 2>&1
-        if [ $? -eq 0 ]; then
+        if /etc/init.d/iptables status > /dev/null 2>&1; then
             for port in ${ports}; do
-                iptables -L -n | grep -i ${port} > /dev/null 2>&1
-                if [ $? -ne 0 ]; then
+                if ! iptables -L -n | grep -iq "${port}"; then
                     iptables -I INPUT -m state --state NEW -m tcp -p tcp --dport ${port} -j ACCEPT
                     if [ ${port} == "53" ]; then
                         iptables -I INPUT -m state --state NEW -m udp -p udp --dport ${port} -j ACCEPT
@@ -286,8 +317,7 @@ config_firewall(){
             echo -e "[${yellow}Warning${plain}] iptables looks like not running or not installed, please enable port ${ports} manually if necessary."
         fi
     else
-        systemctl status firewalld > /dev/null 2>&1
-        if [ $? -eq 0 ]; then
+        if systemctl is-active --quiet firewalld; then
             default_zone=$(firewall-cmd --get-default-zone)
             for port in ${ports}; do
                 firewall-cmd --permanent --zone=${default_zone} --add-port=${port}/tcp
@@ -310,8 +340,12 @@ install_dependencies(){
             yum install -y epel-release > /dev/null 2>&1
         fi
         [ ! -f /etc/yum.repos.d/epel.repo ] && echo -e "[${red}Error${plain}] Install EPEL repository failed, please check it." && exit 1
-        [ ! "$(command -v yum-config-manager)" ] && yum install -y yum-utils > /dev/null 2>&1
-        [ x"$(yum repolist epel | grep -w epel | awk '{print $NF}')" != x"enabled" ] && yum-config-manager --enable epel > /dev/null 2>&1
+        if ! command -v yum-config-manager >/dev/null 2>&1; then
+            yum install -y yum-utils > /dev/null 2>&1
+        fi
+        if [ "x$(yum repolist epel | grep -w epel | awk '{print $NF}' || true)" != "xenabled" ]; then
+            yum-config-manager --enable epel > /dev/null 2>&1
+        fi
         echo -e "[${green}Info${plain}] Checking the EPEL repository complete..."
 
         if [[ ${fastmode} = "1" ]]; then
@@ -323,21 +357,20 @@ install_dependencies(){
                 autoconf automake curl gettext-devel libev-devel pcre-devel perl udns-devel
             )
         fi
-        for depend in ${yum_depends[@]}; do
-            error_detect_depends "yum -y install ${depend}"
+        for depend in "${yum_depends[@]}"; do
+            error_detect_depends yum -y install "${depend}"
         done
         if [[ ${fastmode} = "0" ]]; then
             if centosversion 6; then
-                error_detect_depends "yum -y groupinstall development"
-                error_detect_depends "yum -y install centos-release-scl"
-                error_detect_depends "yum -y install devtoolset-6-gcc-c++"
+                error_detect_depends yum -y groupinstall development
+                error_detect_depends yum -y install centos-release-scl
+                error_detect_depends yum -y install devtoolset-6-gcc-c++
             else
                 yum config-manager --set-enabled powertools
-                yum groups list development | grep Installed > /dev/null 2>&1
-                if [[ $? -eq 0 ]]; then
+                if yum groups list development | grep -q Installed; then
                     yum groups mark remove development -y > /dev/null 2>&1
                 fi
-                error_detect_depends "yum -y groupinstall development"
+                error_detect_depends yum -y groupinstall development
             fi
         fi
     elif check_sys packageManager apt; then
@@ -351,37 +384,37 @@ install_dependencies(){
             )
         fi
         apt-get -y update
-        for depend in ${apt_depends[@]}; do
-            error_detect_depends "apt-get -y install ${depend}"
+        for depend in "${apt_depends[@]}"; do
+            error_detect_depends apt-get -y install "${depend}"
         done
         if [[ ${fastmode} = "0" ]]; then
-            error_detect_depends "apt-get -y install build-essential"
+            error_detect_depends apt-get -y install build-essential
         fi
     fi
 }
 
 compile_dnsmasq(){
     if check_sys packageManager yum; then
-        error_detect_depends "yum -y install epel-release"
-        error_detect_depends "yum -y install make"
-        error_detect_depends "yum -y install gcc-c++"
-        error_detect_depends "yum -y install nettle-devel"
-        error_detect_depends "yum -y install gettext"
-        error_detect_depends "yum -y install libidn-devel"
+        error_detect_depends yum -y install epel-release
+        error_detect_depends yum -y install make
+        error_detect_depends yum -y install gcc-c++
+        error_detect_depends yum -y install nettle-devel
+        error_detect_depends yum -y install gettext
+        error_detect_depends yum -y install libidn-devel
         #error_detect_depends "yum -y install libidn2-devel"
-        error_detect_depends "yum -y install libnetfilter_conntrack-devel"
-        error_detect_depends "yum -y install dbus-devel"
+        error_detect_depends yum -y install libnetfilter_conntrack-devel
+        error_detect_depends yum -y install dbus-devel
     elif check_sys packageManager apt; then
-        error_detect_depends "apt -y install make"
-        error_detect_depends "apt -y install gcc"
-        error_detect_depends "apt -y install g++"
-        error_detect_depends "apt -y install pkg-config"
-        error_detect_depends "apt -y install nettle-dev"
-        error_detect_depends "apt -y install gettext"
-        error_detect_depends "apt -y install libidn11-dev"
+        error_detect_depends apt -y install make
+        error_detect_depends apt -y install gcc
+        error_detect_depends apt -y install g++
+        error_detect_depends apt -y install pkg-config
+        error_detect_depends apt -y install nettle-dev
+        error_detect_depends apt -y install gettext
+        error_detect_depends apt -y install libidn11-dev
         #error_detect_depends "apt -y install libidn2-dev"
-        error_detect_depends "apt -y install libnetfilter-conntrack-dev"
-        error_detect_depends "apt -y install libdbus-1-dev"
+        error_detect_depends apt -y install libnetfilter-conntrack-dev
+        error_detect_depends apt -y install libdbus-1-dev
     fi
     if [ -e /tmp/dnsmasq-2.91 ]; then
         rm -rf /tmp/dnsmasq-2.91
@@ -390,8 +423,7 @@ compile_dnsmasq(){
     download dnsmasq-2.91.tar.gz https://raw.githubusercontent.com/Designdocs/DnsSNIproxy/main/dnsmasq-2.91.tar.gz
     tar -zxf dnsmasq-2.91.tar.gz
     cd dnsmasq-2.91
-    make all-i18n V=s COPTS='-DHAVE_DNSSEC -DHAVE_IDN -DHAVE_CONNTRACK -DHAVE_DBUS'
-    if [ $? -ne 0 ]; then
+    if ! make all-i18n V=s COPTS='-DHAVE_DNSSEC -DHAVE_IDN -DHAVE_CONNTRACK -DHAVE_DBUS'; then
         echo -e "[${red}Error${plain}] dnsmasq upgrade failed."
         rm -rf /tmp/dnsmasq-2.91 /tmp/dnsmasq-2.91.tar.gz
         exit 1
@@ -402,21 +434,23 @@ install_dnsmasq(){
     ensure_dns_port_53_available
     echo "安装Dnsmasq..."
     if check_sys packageManager yum; then
-        error_detect_depends "yum -y install dnsmasq"
+        error_detect_depends yum -y install dnsmasq
         if centosversion 6; then
             compile_dnsmasq
-            yes|cp -f /tmp/dnsmasq-2.91/src/dnsmasq /usr/sbin/dnsmasq && chmod +x /usr/sbin/dnsmasq
+            cp -f /tmp/dnsmasq-2.91/src/dnsmasq /usr/sbin/dnsmasq && chmod +x /usr/sbin/dnsmasq
         fi
     elif check_sys packageManager apt; then
-        error_detect_depends "apt -y install dnsmasq"
+        error_detect_depends apt -y install dnsmasq
     fi
     if [[ ${fastmode} = "0" ]]; then
         compile_dnsmasq
-        yes|cp -f /tmp/dnsmasq-2.91/src/dnsmasq /usr/sbin/dnsmasq && chmod +x /usr/sbin/dnsmasq
+        cp -f /tmp/dnsmasq-2.91/src/dnsmasq /usr/sbin/dnsmasq && chmod +x /usr/sbin/dnsmasq
     fi
     [ ! -f /usr/sbin/dnsmasq ] && echo -e "[${red}Error${plain}] 安装dnsmasq出现问题，请检查." && exit 1
     sync_dnsmasq_rules "${publicip}"
-    [ "$(grep -x -E "(conf-dir=/etc/dnsmasq.d|conf-dir=/etc/dnsmasq.d,.bak|conf-dir=/etc/dnsmasq.d/,\*.conf|conf-dir=/etc/dnsmasq.d,.rpmnew,.rpmsave,.rpmorig)" /etc/dnsmasq.conf)" ] || echo -e "\nconf-dir=/etc/dnsmasq.d" >> /etc/dnsmasq.conf
+    if ! grep -qx -E "(conf-dir=/etc/dnsmasq.d|conf-dir=/etc/dnsmasq.d,.bak|conf-dir=/etc/dnsmasq.d/,\*.conf|conf-dir=/etc/dnsmasq.d,.rpmnew,.rpmsave,.rpmorig)" /etc/dnsmasq.conf; then
+        echo -e "\nconf-dir=/etc/dnsmasq.d" >> /etc/dnsmasq.conf
+    fi
     echo "启动 Dnsmasq 服务..."
     if check_sys packageManager yum; then
         if centosversion 6; then
@@ -442,22 +476,20 @@ install_dnsmasq(){
 
 install_sniproxy(){
     for aport in 80 443; do
-        is_tcp_port_in_use "${aport}" && echo -e "[${red}Error${plain}] required port ${aport} already in use\n" && exit 1
+        is_port_in_use tcp "${aport}" && echo -e "[${red}Error${plain}] required port ${aport} already in use\n" && exit 1
     done
     install_dependencies
     echo "安装SNI Proxy..."
     if check_sys packageManager yum; then
-        rpm -qa | grep sniproxy >/dev/null 2>&1
-        if [ $? -eq 0 ]; then
+        if rpm -qa | grep -q sniproxy; then
             rpm -e sniproxy
         fi
     elif check_sys packageManager apt; then
-        dpkg -s sniproxy >/dev/null 2>&1
-        if [ $? -eq 0 ]; then
+        if dpkg -s sniproxy >/dev/null 2>&1; then
             dpkg -r sniproxy
         fi
     fi
-    bit=`uname -m`
+    bit=$(uname -m)
     cd /tmp
     if [[ ${fastmode} = "0" ]]; then
         if [ -e sniproxy-0.6.1 ]; then
@@ -471,7 +503,7 @@ install_sniproxy(){
         if [[ ${fastmode} = "1" ]]; then
             if [[ ${bit} = "x86_64" ]]; then
                 download /tmp/sniproxy-0.6.1-1.el8.x86_64.rpm ${repo_base_url}/sniproxy/sniproxy-0.6.1-1.el8.x86_64.rpm
-                error_detect_depends "yum -y install /tmp/sniproxy-0.6.1-1.el8.x86_64.rpm"
+                error_detect_depends yum -y install /tmp/sniproxy-0.6.1-1.el8.x86_64.rpm
                 rm -f /tmp/sniproxy-0.6.1-1.el8.x86_64.rpm
             else
                 echo -e "${red}暂不支持${bit}内核，请使用编译模式安装！${plain}" && exit 1
@@ -480,7 +512,7 @@ install_sniproxy(){
             if centosversion 6; then
                 ./autogen.sh && ./configure && make dist
                 scl enable devtoolset-6 'rpmbuild --define "_sourcedir `pwd`" --define "_topdir /tmp/sniproxy/rpmbuild" --define "debug_package %{nil}" -ba redhat/sniproxy.spec'
-                error_detect_depends "yum -y install /tmp/sniproxy/rpmbuild/RPMS/x86_64/sniproxy-*.rpm"
+                error_detect_depends yum -y install /tmp/sniproxy/rpmbuild/RPMS/x86_64/sniproxy-*.rpm
             else
                 ./autogen.sh && ./configure --prefix=/usr && make && make install
             fi
@@ -497,7 +529,7 @@ install_sniproxy(){
         if [[ ${fastmode} = "1" ]]; then
             if [[ ${bit} = "x86_64" ]]; then
                 download /tmp/sniproxy_0.6.1_amd64.deb ${repo_base_url}/sniproxy/sniproxy_0.6.1_amd64.deb
-                error_detect_depends "dpkg -i --no-debsig /tmp/sniproxy_0.6.1_amd64.deb"
+                error_detect_depends dpkg -i --no-debsig /tmp/sniproxy_0.6.1_amd64.deb
                 rm -f /tmp/sniproxy_0.6.1_amd64.deb
             else
                 echo -e "${red}暂不支持${bit}内核，请使用编译模式安装！${plain}" && exit 1
@@ -552,10 +584,10 @@ ready_install(){
     fi
     if check_sys packageManager yum; then
         yum makecache
-        error_detect_depends "yum -y install wget"
+        error_detect_depends yum -y install wget
     elif check_sys packageManager apt; then
         apt update
-        error_detect_depends "apt-get -y install wget"
+        error_detect_depends apt-get -y install wget
     fi
     ensure_port_check_tool
     disable_selinux
@@ -592,7 +624,7 @@ help(){
 }
 
 update_rules(){
-    [ -z "${publicip}" ] && publicip=$(get_ip)
+    [ -z "${publicip:-}" ] && publicip=$(get_ip)
     echo -e "[${green}Info${plain}] 正在同步域名配置..."
     sync_dnsmasq_rules "${publicip}"
     sync_sniproxy_rules
@@ -609,8 +641,17 @@ enable_auto_update(){
     local refresh_cron_line="0 4 * * * bash ${script_path} --refresh >/var/log/dns_sniproxy_update.log 2>&1"
     local data_update_cron_line="30 4 * * * cd ${script_dir} && bash ./update_geodata.sh >/tmp/update_geodata.log 2>&1 && bash ./update_proxy_domains.sh >/tmp/update_proxy_domains.log 2>&1"
     local cron_filter_pattern='dns_sniproxy_update|update_geodata\.log|update_proxy_domains\.log'
+    local current_crontab
 
-    (crontab -l 2>/dev/null | grep -Ev "${cron_filter_pattern}" ; echo "${refresh_cron_line}" ; echo "${data_update_cron_line}") | crontab -
+    current_crontab="$(crontab -l 2>/dev/null || true)"
+
+    {
+        if [ -n "${current_crontab}" ]; then
+            printf '%s\n' "${current_crontab}" | grep -Ev "${cron_filter_pattern}" || true
+        fi
+        echo "${refresh_cron_line}"
+        echo "${data_update_cron_line}"
+    } | crontab -
     echo -e "[${green}Info${plain}] 已写入每日 04:00 自动同步任务与 04:30 数据更新任务，可通过 crontab -l 查看。"
 }
 
@@ -640,12 +681,11 @@ only_dnsmasq(){
             echo -e "[${red}Error:${plain}] IP输入错误次数过多，请重新执行脚本。"
             exit 1
         fi
-        if [ -z ${inputip} ]; then
+        if [ -z "${inputip:-}" ]; then
             publicip=$(get_ip)
             break
         else
-            check_ip ${inputip}
-            if [ $? -eq 0 ]; then
+            if check_ip "${inputip}"; then
                 publicip=${inputip}
                 break
             else
@@ -653,7 +693,7 @@ only_dnsmasq(){
                 read -e -p "(为空则自动获取公网IP): " inputip
             fi
         fi
-        inputipcount=`expr ${inputipcount} + 1`
+        inputipcount=$((inputipcount + 1))
     done
     install_dnsmasq
     echo ""
@@ -691,14 +731,14 @@ undnsmasq(){
     fi
     echo -e "[${green}Info${plain}] Starting to uninstall dnsmasq services."
     if check_sys packageManager yum; then
-        yum remove dnsmasq -y > /dev/null 2>&1
-        if [ $? -ne 0 ]; then
+        if ! yum remove dnsmasq -y > /dev/null 2>&1; then
             echo -e "[${red}Error${plain}] Failed to uninstall ${red}dnsmasq${plain}"
         fi
     elif check_sys packageManager apt; then
-        apt-get remove dnsmasq -y > /dev/null 2>&1
-        apt-get remove dnsmasq-base -y > /dev/null 2>&1
-        if [ $? -ne 0 ]; then
+        if ! apt-get remove dnsmasq -y > /dev/null 2>&1; then
+            echo -e "[${red}Error${plain}] Failed to uninstall ${red}dnsmasq${plain}"
+        fi
+        if ! apt-get remove dnsmasq-base -y > /dev/null 2>&1; then
             echo -e "[${red}Error${plain}] Failed to uninstall ${red}dnsmasq${plain}"
         fi
     fi
@@ -723,13 +763,11 @@ unsniproxy(){
     fi
     echo -e "[${green}Info${plain}] Starting to uninstall sniproxy services."
     if check_sys packageManager yum; then
-        yum remove sniproxy -y > /dev/null 2>&1
-        if [ $? -ne 0 ]; then
+        if ! yum remove sniproxy -y > /dev/null 2>&1; then
             echo -e "[${red}Error${plain}] Failed to uninstall ${red}sniproxy${plain}"
         fi
     elif check_sys packageManager apt; then
-        apt-get remove sniproxy -y > /dev/null 2>&1
-        if [ $? -ne 0 ]; then
+        if ! apt-get remove sniproxy -y > /dev/null 2>&1; then
             echo -e "[${red}Error${plain}] Failed to uninstall ${red}sniproxy${plain}"
         fi
     fi
@@ -741,7 +779,7 @@ confirm(){
     echo -e "${yellow}是否继续执行?(n:取消/y:继续)${plain}"
     read -e -p "(默认:取消): " selection
     [ -z "${selection}" ] && selection="n"
-    if [ ${selection} != "y" ]; then
+    if [ "${selection}" != "y" ]; then
         exit 0
     fi
 }
